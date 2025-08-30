@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trò Chơi Chú Chó Siêu Ngầu</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans&display=swap" rel="stylesheet">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #1a237e;
+            font-family: 'Pixelify Sans', cursive;
+            flex-direction: column;
+            color: #fff;
+        }
+        canvas {
+            background-color: #b7e4f9;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            width: 90vw;
+            max-width: 600px;
+            height: 50vh;
+            max-height: 300px;
+            position: relative;
+        }
+        .game-info {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 1.2rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .game-info p {
+            margin: 5px;
+        }
+        .game-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 20px 40px;
+            border-radius: 10px;
+            border: 2px solid #fff;
+            display: none;
+            flex-direction: column;
+            gap: 15px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            color: white;
+        }
+        .game-message button {
+            background-color: #4CAF50;
+            color: white;
+            border: 2px solid #fff;
+            border-radius: 5px;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: 'Pixelify Sans', cursive;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+        .game-message button:hover {
+            background-color: #45a049;
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <div class="game-info">
+        <h1>Chú Chó Siêu Ngầu</h1>
+        <p>Điểm: <span id="score">0</span></p>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="gameMessage" class="game-message">
+        <h2>Trò Chơi Kết Thúc!</h2>
+        <p>Điểm của bạn: <span id="finalScore">0</span></p>
+        <button id="startButton">Chơi Lại</button>
+    </div>
+
+    <script>
+        // Lấy các phần tử từ trang
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score');
+        const gameMessage = document.getElementById('gameMessage');
+        const finalScoreDisplay = document.getElementById('finalScore');
+        const startButton = document.getElementById('startButton');
+
+        // Các biến của trò chơi
+        let dog = {};
+        let obstacles = [];
+        let clouds = [];
+        let gameSpeed = 5;
+        let score = 0;
+        let isJumping = false;
+        let gameOver = false;
+        let gameLoopId;
+
+        // Các hằng số
+        const gravity = 0.6;
+        const jumpStrength = 15;
+        const dogWidth = 40;
+        const dogHeight = 60;
+        const groundHeight = 10;
+
+        // Hàm khởi tạo trò chơi
+        function initGame() {
+            // Điều chỉnh kích thước canvas cho màn hình
+            canvas.width = window.innerWidth * 0.9 > 600 ? 600 : window.innerWidth * 0.9;
+            canvas.height = window.innerHeight * 0.5 > 300 ? 300 : window.innerHeight * 0.5;
+            
+            // Khởi tạo chú chó
+            dog = {
+                x: 50,
+                y: canvas.height - dogHeight - groundHeight,
+                width: dogWidth,
+                height: dogHeight,
+                yVelocity: 0,
+                isGrounded: true
+            };
+
+            // Đặt lại các biến trò chơi
+            obstacles = [];
+            clouds = [];
+            score = 0;
+            gameSpeed = 5;
+            gameOver = false;
+            scoreDisplay.textContent = score;
+            gameMessage.style.display = 'none';
+
+            // Bắt đầu vòng lặp trò chơi
+            cancelAnimationFrame(gameLoopId);
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        // Vòng lặp chính của trò chơi
+        function gameLoop() {
+            // Xóa canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Cập nhật và vẽ các phần tử nền
+            updateClouds();
+            drawClouds();
+            
+            // Vẽ mặt đất
+            ctx.fillStyle = '#613b30';
+            ctx.fillRect(0, canvas.height - groundHeight, canvas.width, groundHeight);
+            
+            // Cập nhật và vẽ chú chó
+            updateDog();
+            drawDog();
+            
+            // Cập nhật và vẽ các chướng ngại vật
+            updateObstacles();
+            drawObstacles();
+
+            // Cập nhật điểm số
+            score++;
+            scoreDisplay.textContent = Math.floor(score / 10);
+            if (score % 200 === 0) {
+                gameSpeed += 0.5; // Tăng tốc độ trò chơi
+            }
+
+            // Kiểm tra va chạm
+            checkCollision();
+
+            // Tiếp tục vòng lặp trò chơi nếu chưa kết thúc
+            if (!gameOver) {
+                gameLoopId = requestAnimationFrame(gameLoop);
+            } else {
+                showGameOverScreen();
+            }
+        }
+
+        // Cập nhật vị trí chú chó
+        function updateDog() {
+            if (isJumping) {
+                dog.yVelocity = -jumpStrength;
+                isJumping = false;
+                dog.isGrounded = false;
+            }
+
+            dog.y += dog.yVelocity;
+            dog.yVelocity += gravity;
+
+            // Ngăn chú chó rơi khỏi mặt đất
+            if (dog.y + dog.height > canvas.height - groundHeight) {
+                dog.y = canvas.height - dog.height - groundHeight;
+                dog.yVelocity = 0;
+                dog.isGrounded = true;
+            }
+        }
+
+        // Vẽ chú chó ngầu hơn với nhiều chi tiết hơn
+        function drawDog() {
+            ctx.fillStyle = '#4c2e2e'; // Màu nâu sẫm
+            const x = dog.x;
+            const y = dog.y;
+            const w = dog.width;
+            const h = dog.height;
+
+            // Thân
+            ctx.fillRect(x, y + h * 0.4, w, h * 0.6);
+
+            // Đầu
+            ctx.fillRect(x + w * 0.6, y + h * 0.1, w * 0.4, h * 0.4);
+            ctx.fillRect(x + w * 0.5, y + h * 0.2, w * 0.2, h * 0.2); // Mõm
+
+            // Tai
+            ctx.beginPath();
+            ctx.moveTo(x + w * 0.8, y + h * 0.1);
+            ctx.lineTo(x + w * 0.9, y - h * 0.1);
+            ctx.lineTo(x + w, y + h * 0.1);
+            ctx.fill();
+
+            // Đuôi
+            ctx.beginPath();
+            ctx.moveTo(x, y + h * 0.5);
+            ctx.lineTo(x - 10, y + h * 0.3);
+            ctx.lineTo(x, y + h * 0.7);
+            ctx.closePath();
+            ctx.fill();
+
+            // Chân
+            ctx.fillRect(x + w * 0.1, y + h * 0.8, w * 0.2, h * 0.2);
+            ctx.fillRect(x + w * 0.7, y + h * 0.8, w * 0.2, h * 0.2);
+
+            // Mắt (mắt đơn giản màu trắng để tạo hiệu ứng ngầu)
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(x + w * 0.8, y + h * 0.25, 5, 5);
+        }
+
+        // Cập nhật và tạo chướng ngại vật
+        let obstacleSpawnInterval = 1000;
+        let lastObstacleTime = 0;
+        function updateObstacles() {
+            const currentTime = Date.now();
+            if (currentTime - lastObstacleTime > obstacleSpawnInterval) {
+                createObstacle();
+                lastObstacleTime = currentTime;
+                obstacleSpawnInterval = 1000 + Math.random() * 1500; // Ngẫu nhiên hóa thời gian xuất hiện
+            }
+
+            // Di chuyển và loại bỏ các chướng ngại vật ra khỏi màn hình
+            for (let i = 0; i < obstacles.length; i++) {
+                obstacles[i].x -= gameSpeed;
+                if (obstacles[i].x + obstacles[i].width < 0) {
+                    obstacles.splice(i, 1);
+                    i--;
+                }
+            }
+        }
+
+        // Tạo chướng ngại vật mới
+        function createObstacle() {
+            let obstacleWidth;
+            let obstacleHeight;
+            let obstacleY;
+            let type;
+
+            const isFlying = Math.random() < 0.3; // 30% cơ hội trở thành chướng ngại vật bay
+
+            if (isFlying) {
+                obstacleWidth = 20 + Math.random() * 40;
+                obstacleHeight = 10 + Math.random() * 20;
+                obstacleY = canvas.height * 0.4 + Math.random() * (canvas.height * 0.3);
+                type = 'bird';
+            } else {
+                obstacleWidth = 30 + Math.random() * 50;
+                obstacleHeight = 20 + Math.random() * 40;
+                obstacleY = canvas.height - obstacleHeight - groundHeight;
+                type = 'bush';
+            }
+
+            obstacles.push({
+                x: canvas.width,
+                y: obstacleY,
+                width: obstacleWidth,
+                height: obstacleHeight,
+                type: type
+            });
+        }
+
+        // Vẽ chướng ngại vật với nhiều chi tiết hơn
+        function drawObstacles() {
+            obstacles.forEach(obstacle => {
+                if (obstacle.type === 'bush') {
+                    // Vẽ bụi gai chi tiết
+                    ctx.fillStyle = '#228B22'; // Màu xanh lá cây
+                    const x = obstacle.x;
+                    const y = obstacle.y;
+                    const w = obstacle.width;
+                    const h = obstacle.height;
+                    
+                    ctx.fillRect(x, y + h * 0.8, w, h * 0.2); // Phần gốc của bụi gai
+                    
+                    ctx.beginPath();
+                    ctx.arc(x + w * 0.25, y + h * 0.7, w * 0.15, Math.PI, 0, true);
+                    ctx.arc(x + w * 0.5, y + h * 0.6, w * 0.18, Math.PI, 0, true);
+                    ctx.arc(x + w * 0.75, y + h * 0.7, w * 0.15, Math.PI, 0, true);
+                    ctx.closePath();
+                    ctx.fill();
+
+                } else if (obstacle.type === 'bird') {
+                    // Vẽ chú chim ngầu
+                    ctx.fillStyle = '#8B4513'; // Màu nâu yên ngựa
+                    const x = obstacle.x;
+                    const y = obstacle.y;
+                    const w = obstacle.width;
+                    const h = obstacle.height;
+
+                    // Thân
+                    ctx.beginPath();
+                    ctx.arc(x + w * 0.5, y + h * 0.5, h * 0.4, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Cánh (đơn giản, cách điệu hơn)
+                    ctx.beginPath();
+                    ctx.moveTo(x + w * 0.2, y + h * 0.4);
+                    ctx.lineTo(x + w * 0.5, y);
+                    ctx.lineTo(x + w * 0.8, y + h * 0.4);
+                    ctx.lineTo(x + w * 0.5, y + h * 0.2);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    // Mắt
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(x + w * 0.5 - 2, y + h * 0.4 - 2, 4, 4);
+                }
+            });
+        }
+
+        // Kiểm tra va chạm
+        function checkCollision() {
+            obstacles.forEach(obstacle => {
+                if (
+                    dog.x < obstacle.x + obstacle.width &&
+                    dog.x + dog.width > obstacle.x &&
+                    dog.y < obstacle.y + obstacle.height &&
+                    dog.y + dog.height > obstacle.y
+                ) {
+                    gameOver = true;
+                }
+            });
+        }
+
+        // Vẽ mây chuyển động
+        function drawClouds() {
+            clouds.forEach(cloud => {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.beginPath();
+                ctx.arc(cloud.x, cloud.y, 20, 0, Math.PI * 2);
+                ctx.arc(cloud.x + 20, cloud.y + 10, 20, 0, Math.PI * 2);
+                ctx.arc(cloud.x + 40, cloud.y, 20, 0, Math.PI * 2);
+                ctx.arc(cloud.x + 20, cloud.y - 10, 20, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        // Cập nhật mây
+        function updateClouds() {
+            // Di chuyển mây
+            for (let i = 0; i < clouds.length; i++) {
+                clouds[i].x -= 0.5;
+                if (clouds[i].x + 40 < 0) {
+                    clouds.splice(i, 1);
+                    i--;
+                }
+            }
+            // Tạo mây mới
+            if (Math.random() < 0.01) {
+                clouds.push({
+                    x: canvas.width,
+                    y: Math.random() * canvas.height * 0.3
+                });
+            }
+        }
+        
+        // Hiển thị màn hình kết thúc trò chơi
+        function showGameOverScreen() {
+            finalScoreDisplay.textContent = Math.floor(score / 10);
+            gameMessage.style.display = 'flex';
+        }
+
+        // Xử lý sự kiện nhảy
+        function handleJump(event) {
+            if (event.key === ' ' || event.key === 'ArrowUp' || event.code === 'Space') {
+                if (dog.isGrounded && !gameOver) {
+                    isJumping = true;
+                    dog.isGrounded = false;
+                }
+            }
+        }
+
+        // Lắng nghe sự kiện
+        document.addEventListener('keydown', handleJump);
+        startButton.addEventListener('click', initGame);
+        
+        // Bắt đầu trò chơi khi trang tải xong
+        window.onload = initGame;
+    </script>
+</body>
+</html>
